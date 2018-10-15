@@ -137,7 +137,8 @@ def main():
     dest_file,
     zoom=zoom,
     width=width,
-    height=height)
+    height=height,
+    template=template)
 
 if __name__ == "__main__":
   sys.exit(main())
