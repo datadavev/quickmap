@@ -5,7 +5,7 @@ Python tool for generating a static map given an adress or coordinate.
 import sys
 import logging
 import argparse
-import staticmap
+import staticmap   # https://github.com/komoot/staticmap
 import geocoder
 
 # https://wiki.openstreetmap.org/wiki/Tile_servers
@@ -26,21 +26,25 @@ def georeference(place):
   return location[0]
 
 
+def stringCoordToFloat(s, delim=','):
+  ab = s.split(delim)
+  return [float(ab[0].strip()), float(ab[1].strip())]
+
+
 def generateMap(
-  latitude, 
-  longitude, 
-  dest_file, 
+  lon_lat,
+  dest_file,
   zoom=12,
   width=640, 
   height=480, 
   template=DEFAULT_TEMPLATE):
   
-  coord = (longitude, latitude)
   m = staticmap.StaticMap(width, height, 10, url_template=URL_TEMPLATES[template])
-  marker_outline = staticmap.CircleMarker(coord, "white", 18)
-  marker = staticmap.CircleMarker(coord, "#0036FF", 10)
-  m.add_marker(marker_outline)
-  m.add_marker(marker)
+  for coord in lon_lat:
+    marker_outline = staticmap.CircleMarker(coord, "white", 18)
+    marker = staticmap.CircleMarker(coord, "#0036FF", 10)
+    m.add_marker(marker_outline)
+    m.add_marker(marker)
   image = m.render(zoom=zoom)
   image.save(dest_file)
 
@@ -67,7 +71,7 @@ def main():
   parser.add_argument(
     '-C','--coordinate',
     default=None,
-    help='Latitude,Longitude in decimal degrees (overrides address).')
+    help='Sequence of longitude, latitude in decimal degrees (overrides address).')
   parser.add_argument(
     '-z','--zoom',
     default=12,
@@ -85,10 +89,15 @@ def main():
     default=DEFAULT_TEMPLATE,
     help='Name of template to use.')
   parser.add_argument(
-    'address', 
+    '-a','--address',
+    default=None,
+    help="Address to lookup and plot"
+  )
+  parser.add_argument(
+    'coords',
     default=None,
     nargs='?',
-    help='Address of location to show.')
+    help='Optional white space delimited list of longitude,latitude')
   args = parser.parse_args()
   # Setup logging verbosity
   levels = [logging.WARNING, logging.INFO, logging.DEBUG]
@@ -101,30 +110,30 @@ def main():
     logging.error("Template %s is not available.", template)
     logging.info("Available templates include: %s", "\n".join(URL_TEMPLATES.keys()))
     return 0
-  coordinates = {'latitude':None, 'longitude':None}
+  coords = []
   if args.coordinate is not None:
-    coords = [float(c.strip()) for c in args.coordinates.split(',')]
-    coordinates['latitude'] = coords[0]
-    coordinates['longitude'] = coords[1]
-  else:
-    if args.latitude is not None:
-      coordinates['latitude'] = float(args.latitude.strip())
-    if args.longitude is not None:
-      coordinates['longitude'] = float(args.longitude.strip())
-  if coordinates['latitude'] is None or coordiantes['longitude'] is None:
-    if args.address is None:
-      logging.error("Address or cordinates are required.")
-      return(1)
+    tcoords = [float(c.strip()) for c in args.coordinate.split(',')]
+    coords = [tcoords[0:1],]
+  elif args.latitude is not None and args.longitude is not None:
+    coords = [[float(args.longitude.strip()), float(args.latitude.strip())],]
+  elif args.address is not None:
     location = georeference(args.address)
-    coordinates['latitude'] = location.lat
-    coordinates['longitude'] = location.lng
+    coords.append([location.lng, location.lat])
+  elif args.coords is not None: #list of coordinates
+    coordinates = args.coords.split()
+    coords = list(map( stringCoordToFloat, coordinates))
+  else:
+    coordinates = sys.stdin.read().strip().split()
+    coords = list(map( stringCoordToFloat, coordinates))
+  if len(coords) < 1:
+    logging.error("No coordinates provided on stdin or as parameters.")
+    return 1
   zoom = int(args.zoom)
   width = int(args.width)
   height = int(args.height)
   dest_file = args.outfile
   generateMap(
-    coordinates['latitude'],
-    coordinates['longitude'],
+    coords,
     dest_file,
     zoom=zoom,
     width=width,
